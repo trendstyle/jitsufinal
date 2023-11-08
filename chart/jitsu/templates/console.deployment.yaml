@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: '{{ .Release.Name }}-console'
+  labels:
+    katenary.io/component: console
+    katenary.io/project: '{{ .Chart.Name }}'
+    katenary.io/release: '{{ .Release.Name }}'
+  annotations:
+    katenary.io/docker-compose-sha1: da39a3ee5e6b4b0d3255bfef95601890afd80709
+    katenary.io/version: 2.0.0-beta2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      katenary.io/component: console
+      katenary.io/release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      labels:
+        katenary.io/component: console
+        katenary.io/release: '{{ .Release.Name }}'
+    spec:
+      initContainers:
+        - name: check-bulker
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking bulker port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-bulker {{ .Values.bulker.environment.BULKER_HTTP_PORT }} 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+        - name: check-postgres
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking postgres port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-postgres {{ .Values.postgres.service.port }} 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+        - name: check-redis
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking redis port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }} 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+      containers:
+        - name: console
+          image: '{{ .Values.console.repository.image }}{{ if ne .Values.console.repository.tag "" }}:{{ .Values.console.repository.tag }}{{ end }}'
+          ports:
+            - name: console
+              containerPort: {{ .Values.console.service.port }}
+          env:
+            - name: DISABLE_SIGNUP
+              value: '{{ tpl .Values.console.environment.DISABLE_SIGNUP . }}'
+            - name: TEST_CREDENTIALS
+              value: '{{ tpl .Values.console.environment.TEST_CREDENTIALS . }}'
+            - name: ROTOR_URL
+              value: 'http://{{ .Release.Name }}-rotor:{{ .Values.rotor.environment.ROTOR_HTTP_PORT }}'
+            - name: NEXTAUTH_URL
+              value: 'https://{{ .Values.console.ingress.host }}/'
+            - name: GITHUB_CLIENT_ID
+              value: '{{ tpl .Values.console.environment.GITHUB_CLIENT_ID . }}'
+            - name: TEST_CREDENTIALS_SHOW_LOGIN
+              value: '{{ tpl .Values.console.environment.TEST_CREDENTIALS_SHOW_LOGIN . }}'
+            - name: GOOGLE_SCHEDULER_LOCATION
+              value: '{{ tpl .Values.console.environment.GOOGLE_SCHEDULER_LOCATION . }}'
+            - name: UPDATE_DB
+              value: '{{ tpl .Values.console.environment.UPDATE_DB . }}'
+            - name: BULKER_URL
+              value: 'http://{{ .Release.Name }}-bulker:{{ .Values.bulker.environment.BULKER_HTTP_PORT }}'
+            - name: SYNCS_ENABLED
+              value: '{{ tpl .Values.console.environment.SYNCS_ENABLED . }}'
+            - name: SYNCCTL_URL
+              value: 'http://{{ .Release.Name }}-syncctl:{{ .Values.syncctl.environment.HTTP_PORT }}'
+            - name: BULKER_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: BULKER_AUTH_TOKEN
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: GITHUB_CLIENT_SECRET
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: SYNCCTL_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: SYNCCTL_AUTH_TOKEN
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_URL
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: DATABASE_URL
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: GOOGLE_SCHEDULER_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: GOOGLE_SCHEDULER_KEY
+                  name: '{{ tpl .Values.secrets.name . }}'
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "300M"

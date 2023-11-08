@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: '{{ .Release.Name }}-kafka'
+  labels:
+    katenary.io/component: kafka
+    katenary.io/project: '{{ .Chart.Name }}'
+    katenary.io/release: '{{ .Release.Name }}'
+  annotations:
+    katenary.io/docker-compose-sha1: da39a3ee5e6b4b0d3255bfef95601890afd80709
+    katenary.io/version: 2.0.0-beta2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      katenary.io/component: kafka
+      katenary.io/release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      labels:
+        katenary.io/component: kafka
+        katenary.io/release: '{{ .Release.Name }}'
+    spec:
+      initContainers:
+        - name: check-zookeeper
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking zookeeper port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-zookeeper {{.Values.zookeeper.service.port}} 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+      containers:
+        - name: kafka
+          image: '{{ .Values.kafka.repository.image }}{{ if ne .Values.kafka.repository.tag "" }}:{{ .Values.kafka.repository.tag }}{{ end }}'
+          ports:
+            - name: kafka
+              containerPort: {{.Values.kafka.service.port}}
+          env:
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: '{{ .Release.Name }}-zookeeper:{{.Values.zookeeper.service.port}}'
+            - name: KAFKA_LISTENERS
+              value: 'INTERNAL://0.0.0.0:{{.Values.kafka.service.port}},OUTSIDE://0.0.0.0:{{.Values.kafka.service.internalPort}}'
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: 'INTERNAL://{{ .Release.Name }}-kafka:{{.Values.kafka.service.port}},OUTSIDE://localhost:{{.Values.kafka.service.internalPort}}'
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: 'INTERNAL:PLAINTEXT,OUTSIDE:PLAINTEXT'
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: 'INTERNAL'
+          livenessProbe:
+            exec:
+              command:
+                - kafka-topics.sh --bootstrap-server 127.0.0.1:{{.Values.kafka.service.internalPort}} --describe
+            periodSeconds: 5
+            initialDelaySeconds: 0
+            successThreshold: 1
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "1000M"

@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: '{{ .Release.Name }}-postgres'
+  labels:
+    katenary.io/component: postgres
+    katenary.io/project: '{{ .Chart.Name }}'
+    katenary.io/release: '{{ .Release.Name }}'
+  annotations:
+    katenary.io/docker-compose-sha1: da39a3ee5e6b4b0d3255bfef95601890afd80709
+    katenary.io/version: 2.0.0-beta2
+spec:
+  replicas: 1
+  serviceName: '{{ .Release.Name }}-postgres'
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+      labels:
+        katenary.io/project: '{{ .Chart.Name }}'
+      annotations:
+        volume.beta.kubernetes.io/storage-class: '{{ .Values.postgres.storage.class }}'
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: '{{ .Values.postgres.storage.size }}'
+  selector:
+    matchLabels:
+      katenary.io/component: postgres
+      katenary.io/release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      labels:
+        katenary.io/component: postgres
+        katenary.io/release: '{{ .Release.Name }}'
+    spec:
+      containers:
+        - name: postgres
+          image: '{{ .Values.postgres.repository.image }}{{ if ne .Values.postgres.repository.tag "" }}:{{ .Values.postgres.repository.tag }}{{ end }}'
+          ports:
+            - name: postgres
+              containerPort: {{.Values.postgres.service.port}}
+          env:
+          - name: POSTGRES_USER
+            value: '{{ tpl .Values.postgres.environment.POSTGRES_USER . }}'
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: POSTGRES_PASSWORD
+                name: '{{ tpl .Values.secrets.name . }}'
+          - name: PGDATA
+            value: /var/lib/postgresql/data/pg_data
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -d
+                - localhost
+            periodSeconds: 1
+            initialDelaySeconds: 0
+            successThreshold: 1
+            failureThreshold: 10
+          volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            name: postgres-data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "100M"

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: '{{ .Release.Name }}-redis'
+  labels:
+    katenary.io/component: redis
+    katenary.io/project: '{{ .Chart.Name }}'
+    katenary.io/release: '{{ .Release.Name }}'
+  annotations:
+    katenary.io/docker-compose-sha1: da39a3ee5e6b4b0d3255bfef95601890afd80709
+    katenary.io/version: 2.0.0-beta2
+spec:
+  replicas: 1
+  serviceName: '{{ .Release.Name }}-redis'
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+      labels:
+        katenary.io/project: '{{ .Chart.Name }}'
+      annotations:
+        volume.beta.kubernetes.io/storage-class: '{{ .Values.redis.storage.class }}'
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: '{{ .Values.redis.storage.size }}'
+  selector:
+    matchLabels:
+      katenary.io/component: redis
+      katenary.io/release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      labels:
+        katenary.io/component: redis
+        katenary.io/release: '{{ .Release.Name }}'
+    spec:
+      containers:
+        - name: redis
+          image: '{{ .Values.redis.repository.image }}{{ if ne .Values.redis.repository.tag "" }}:{{ .Values.redis.repository.tag }}{{ end }}'
+          ports:
+          - name: redis
+            containerPort: {{.Values.redis.service.port}}
+          command:
+            - redis-server
+            - --save
+            - "20"
+            - "1"
+            - --loglevel
+            - warning
+            - --requirepass
+            - "$(REDIS_PASSWORD)"
+          volumeMounts:
+          - mountPath: /data
+            name: redis-data
+          env:
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "{{ tpl .Values.secrets.name . }}"
+                key: REDIS_PASSWORD
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "50M"

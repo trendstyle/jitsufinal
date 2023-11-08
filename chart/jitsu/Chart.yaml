@@ -1,0 +1,8 @@
+# Create on 2023-10-18T10:15:36+02:00
+# Katenary command line: katenary convert -c jitsu-compose.yml
+apiVersion: v2
+appVersion: 0.0.1
+description: A helm chart for jitsu
+name: jitsu
+type: application
+version: 0.1.0

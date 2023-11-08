@@ -1,0 +1,79 @@
+secrets:
+    name: '{{ .Release.Name }}-jitsu-secrets'
+    values:
+      GITHUB_CLIENT_SECRET: $GITHUB_CLIENT_SECRET
+      GOOGLE_SCHEDULER_KEY: $GOOGLE_SCHEDULER_KEY
+bulker:
+  environment:
+    BULKER_CONFIG_SOURCE: redis
+    BULKER_HTTP_PORT: "3042"
+  repository:
+    image: jitsucom/bulker
+    tag: latest
+console:
+  environment:
+    DISABLE_SIGNUP: "true"
+    GITHUB_CLIENT_ID: $GITHUB_CLIENT_ID
+    GOOGLE_SCHEDULER_LOCATION: europe-west3
+    SYNCS_ENABLED: "true"
+    TEST_CREDENTIALS: ""
+    TEST_CREDENTIALS_SHOW_LOGIN: "false"
+    UPDATE_DB: "true"
+  repository:
+    image: jitsucom/console
+    tag: latest
+  service:
+    port: "3000"
+  ingress:
+    host: $HOST_URL
+kafka:
+  repository:
+    image: wurstmeister/kafka
+    tag: latest
+  service:
+    port: '19093'
+    internalPort: '19092'
+postgres:
+  environment:
+    POSTGRES_USER: postgres
+  repository:
+    image: postgres
+    tag: "14"
+  storage:
+    class: $STORAGE_CLASS
+    size: 5Gi
+  service:
+    port: '5432'
+redis:
+  repository:
+    image: redis
+    tag: 6.2-alpine
+  storage:
+    class: $STORAGE_CLASS
+    size: 5Gi
+  service:
+    port: '6379'
+rotor:
+  environment:
+    BULKER_AUTH_KEY: 4ba41958f341469993fd8ea1c0c932f0
+    DISABLE_SERVICE_pg: "true"
+    DISABLE_SERVICE_prisma: "true"
+    ROTOR_HTTP_PORT: "3401"
+  repository:
+    image: jitsucom/rotor
+    tag: latest
+syncctl:
+  environment:
+    HTTP_PORT: "3043"
+    SYNCCTL_BULKER_LOGS_CONNECTION_ID: jitsu_bulker_logs
+    SYNCCTL_KUBERNETES_CLIENT_CONFIG: local
+    SYNCCTL_KUBERNETES_CONTEXT: ""
+  repository:
+    image: jitsucom/syncctl
+    tag: latest
+zookeeper:
+  repository:
+    image: wurstmeister/zookeeper
+    tag: latest
+  service:
+    port: '2181'

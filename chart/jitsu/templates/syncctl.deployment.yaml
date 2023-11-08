@@ -1,0 +1,92 @@
+{{ if eq .Values.console.environment.SYNCS_ENABLED "true" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: '{{ .Release.Name }}-syncctl'
+  labels:
+    katenary.io/component: syncctl
+    katenary.io/project: '{{ .Chart.Name }}'
+    katenary.io/release: '{{ .Release.Name }}'
+  annotations:
+    katenary.io/docker-compose-sha1: da39a3ee5e6b4b0d3255bfef95601890afd80709
+    katenary.io/version: 2.0.0-beta2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      katenary.io/component: syncctl
+      katenary.io/release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      labels:
+        katenary.io/component: syncctl
+        katenary.io/release: '{{ .Release.Name }}'
+    spec:
+      initContainers:
+        - name: check-bulker
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking bulker port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-bulker 3042 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+        - name: check-postgres
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking postgres port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-postgres 5432 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+      containers:
+        - name: syncctl
+          image: '{{ .Values.syncctl.repository.image }}{{ if ne .Values.syncctl.repository.tag "" }}:{{ .Values.syncctl.repository.tag }}{{ end }}'
+          ports:
+            - name: syncctl
+              containerPort: 3043
+          env:
+            - name: SYNCCTL_KUBERNETES_NAMESPACE
+              value: '{{ .Release.Namespace }}'
+            - name: SYNCCTL_BULKER_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: BULKER_AUTH_TOKEN
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: SYNCCTL_KUBERNETES_CONTEXT
+              value: '{{ tpl .Values.syncctl.environment.SYNCCTL_KUBERNETES_CONTEXT . }}'
+            - name: SYNCCTL_BULKER_URL
+              value: 'http://{{ .Release.Name }}-bulker:{{ .Values.bulker.environment.BULKER_HTTP_PORT }}'
+            - name: SYNCCTL_AUTH_TOKENS
+              valueFrom:
+                secretKeyRef:
+                  key: SYNCCTL_AUTH_TOKEN
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: SYNCCTL_KUBERNETES_CLIENT_CONFIG
+              value: '{{ tpl .Values.syncctl.environment.SYNCCTL_KUBERNETES_CLIENT_CONFIG . }}'
+            - name: HTTP_PORT
+              value: '{{ tpl .Values.syncctl.environment.HTTP_PORT . }}'
+            - name: SYNCCTL_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: DATABASE_URL
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: SYNCCTL_BULKER_LOGS_CONNECTION_ID
+              value: '{{ tpl .Values.syncctl.environment.SYNCCTL_BULKER_LOGS_CONNECTION_ID . }}'
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "300M"
+{{ end }}

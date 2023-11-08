@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: '{{ .Release.Name }}-rotor'
+  labels:
+    katenary.io/component: rotor
+    katenary.io/project: '{{ .Chart.Name }}'
+    katenary.io/release: '{{ .Release.Name }}'
+  annotations:
+    katenary.io/docker-compose-sha1: da39a3ee5e6b4b0d3255bfef95601890afd80709
+    katenary.io/version: 2.0.0-beta2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      katenary.io/component: rotor
+      katenary.io/release: '{{ .Release.Name }}'
+  template:
+    metadata:
+      labels:
+        katenary.io/component: rotor
+        katenary.io/release: '{{ .Release.Name }}'
+    spec:
+      initContainers:
+        - name: check-kafka
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking kafka port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-kafka {{ .Values.kafka.service.port }} 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+        - name: check-redis
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking redis port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-redis {{ .Values.redis.service.port }} 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+        - name: check-bulker
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |-
+              OK=0
+              echo "Checking bulker port"
+              while [ $OK != 1 ]; do
+                  echo -n "."
+                  nc -z {{ .Release.Name }}-bulker {{ .Values.bulker.environment.BULKER_HTTP_PORT }} 2>&1 >/dev/null && OK=1 || sleep 1
+              done
+              echo
+              echo "Done"
+      containers:
+        - name: rotor
+          image: '{{ .Values.rotor.repository.image }}{{ if ne .Values.rotor.repository.tag "" }}:{{ .Values.rotor.repository.tag }}{{ end }}'
+          env:
+            - name: DISABLE_SERVICE_pg
+              value: '{{ tpl .Values.rotor.environment.DISABLE_SERVICE_pg . }}'
+            - name: DISABLE_SERVICE_prisma
+              value: '{{ tpl .Values.rotor.environment.DISABLE_SERVICE_prisma . }}'
+            - name: BULKER_URL
+              value: 'http://{{ .Release.Name }}-bulker:{{ .Values.bulker.environment.BULKER_HTTP_PORT }}'
+            - name: BULKER_AUTH_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: BULKER_AUTH_TOKEN
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: '{{ .Release.Name }}-kafka:{{ .Values.kafka.service.port }}'
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  key: REDIS_URL
+                  name: '{{ tpl .Values.secrets.name . }}'
+            - name: MONGODB_URL
+              valueFrom:
+                secretKeyRef:
+                  key: MONGODB_URL
+                  name: '{{ tpl .Values.secrets.name . }}' 
+          ports:
+            - name: rotor
+              containerPort: {{ .Values.rotor.environment.ROTOR_HTTP_PORT }}
+          livenessProbe:
+            exec:
+              command:
+              - curl
+              - -f
+              - 'http://localhost:{{ .Values.rotor.environment.ROTOR_HTTP_PORT }}/health'
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "300M"
