@@ -64,6 +64,11 @@ spec:
           - mountPath: /var/lib/postgresql/data
             name: postgres-data
           resources:
+            limits:
+              hugepages-2Mi: 512Mi
+              memory: 512Mi
+            requests:
+              memory: 128i
             requests:
               cpu: "100m"
-              memory: "100M"
+              memory: "1Gi"
